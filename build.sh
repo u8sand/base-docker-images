@@ -38,18 +38,28 @@ get_file() {
   fi
 }
 
+make_file() {
+	IMG=$1
+	TYPE=$2
+  FILE=$(get_file $IMG $TYPE)
+
+  if [ "$IMG" != "base" ]; then
+    sed "s:FROM \\(.*\\)$:FROM $DOMAIN/\1:g" $FILE
+  else
+    cat $FILE
+  fi
+}
+
 for IMG in */; do
     awk "/^FROM/{print \$2\" $(basename $IMG)\"}" $(get_file "$IMG" "$TYPE")
 done | tsort | while read IMG; do
   if [ -d $IMG ]; then
     echo "Bulding $IMG..."
-    docker build -f $(get_file "$IMG" "$TYPE") -t $IMG $IMG
+    make_file "$IMG" "$TYPE" | docker build -f - -t $DOMAIN/$IMG $IMG
     if [ $? -ne 0 ]; then
       echo "Failed to build $IMG!"
       exit 1
     fi
-    echo "Tagging $IMG $DOMAIN/$IMG..."
-    docker tag $IMG $DOMAIN/$IMG
     if [ $PUSH -ne 0 ]; then
       echo "Pushing $DOMAIN/$IMG..."
       docker push $DOMAIN/$IMG
@@ -60,7 +70,7 @@ done | tsort | while read IMG; do
     fi
     if [ $SAVE -ne 0 ]; then
       echo "Saving $IMG..."
-      docker save -o $IMG.tar $IMG
+      docker save -o $IMG.tar $DOMAIN/$IMG
       if [ $? -ne 0 ]; then
         echo "Failed to save $IMG!"
         exit 1
